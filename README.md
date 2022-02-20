@@ -16,7 +16,7 @@ alias grun='java org.antlr.v4.gui.TestRig'
 ```
 You can run the provided examples to produce the AST (Abstract Syntax Tree) using the following command:
 ```bash
-antlr4 InsightsAST.g4
+antlr InsightsAST.g4
 javac InsightsAST*.java
-grun Expr queries -gui < examples.ins
+grun InsightsAST queries -gui < examples2.ins
 ```

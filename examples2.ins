@@ -1,0 +1,276 @@
+/**
+A. IoT Transportation Analytics
+**/
+
+/**
+Example 1: Descriptive Statistics
+**/
+
+average_fare_amount = 
+	COMPUTE MEAN(taxis_fare_amount, 1 HOURS) 
+	EVERY 5 SECONDS
+;
+
+average_fare_amount_per_area = 
+	COMPUTE MEAN(taxis_fare_amount, 1 HOURS) 
+	BY city_segment 
+	EVERY 5 SECONDS
+;
+
+top_3_areas=
+	COMPUTE TOP_K[3](MEAN(taxi_fare_amount, 1 HOURS) BY city_segment)
+	EVERY 5 SECONDS
+;
+
+/**
+Example 2: Composite Analytic Queries
+**/
+
+top_5_areas_increase =
+	COMPUTE TOP_K[5] (
+			( 
+				MEAN(total_amount, 1 MONTHS)-MEAN(total_amount, 1 MONTHS, 1 MONTHS )
+			) 
+			BY city_segment 
+		) 
+	EVERY 1 HOURS
+;
+
+
+
+top_10_taxis_most_profit_areas =
+COMPUTE TOP_K[10](
+(SUM(total_amount, 1 MONTHS) / COUNT(taxi_passenger, 1 MONTHS)) BY city_segment
+) EVERY 1 HOURS
+;
+
+
+/**
+Example 3: Query with Multiple Data Sources
+**/
+
+city_segment_min_num_of_vehicles =
+COMPUTE MIN(
+(COUNT(buses, 15 MINUTES)  + COUNT(sharing, 15 MINUTES)  + COUNT(taxis, 15 MINUTES))
+BY city_segment
+) WHEN temperature <= 10 EVERY 10 SECONDS
+;
+
+
+/**
+Example 4: Metric Filtering and Forecasting
+**/
+
+filtered_forecasting_delay =
+COMPUTE FORECAST[3](
+MEAN(bus_delay WHEN > 0, 1 HOURS)
+) BY stopID EVERY 1 MINUTES
+;
+
+
+/**
+Example 5: Find Closest Datapoints
+**/
+
+closest_taxis_car_sharing_vehicles =
+COMPUTE vehicleID
+FROM taxis, car_sharing
+WHEN GEOHASH[10](cusLoc) == GEOHASH[10](vehLoc)
+EVERY 1 MINUTES
+;
+
+
+/**
+B. Energy Consumption in Datacenters
+**/
+/**
+Example 6: Abnormal Value Detection
+**/
+
+abnormal_temp = COMPUTE rackID
+WHEN temp > (RUNNING_MEAN(temp)
++ 3 * RUNNING_SDEV(temp))
+EVERY 5 SECONDS
+;
+
+/**
+Example 7: Prioritized Query Execution
+**/
+
+datacenter_energy_consumption_histogram =
+COMPUTE HISTOGRAM[5](
+daily_energy_consumption
+) BY rackID EVERY 1 DAYS AT 23:59
+WITH SALIENCE 2
+;
+
+smoke_mean = COMPUTE MEAN(smoke)
+BY rack_room EVERY 1 SECONDS
+WITH SALIENCE 5 AND ALLOW ON DEDICATED
+;
+
+/**
+Example 8: Adaptive and Cost-aware Query Execution
+**/
+
+cost = COMPUTE
+(PRICE_PER_KWh * (MEAN(consumption, 1 HOURS)-MEAN(generated_solar_energy, 1 HOURS)))
+BY DC_ID
+EVERY 15 MINUTES
+;
+
+
+query = COMPUTE MEAN(consumption, 5 MINUTES)
+EVERY 1 MINUTES
+WITH ALLOW WHEN dc_cost == MIN(cost)
+;
+
+
+/** 
+Example 9: Sample Query Execution
+**/
+
+sample_energy_generation =
+COMPUTE MEAN(energy, 30 MINUTES)
+BY rackID EVERY 1 MINUTES
+WITH SAMPLE 0.4
+;
+
+
+/**
+Example 10: Computation Awareness and Bounded Sampling Error
+**/
+
+sampling_computation_awareness =
+COMPUTE PEWMA[0.5](energy) BY rackID
+EVERY 1 MINUTES
+WITH CONFIDENCE 0.95 AND MAX_ERROR 0.05
+AND AWARENESS ON COMPUTATIONS
+;
+
+
+/**
+C. Privacy-Aware Healthcare Analytics
+**/
+/**
+Example 11: Signature-Based Encrypted Query
+**/
+
+extreme_heartbeat =
+COMPUTE 
+MEAN(heart_beat, 1 MINUTES)
+WHEN >= 190 
+BY patientID
+WITH SIGNATURE 'authority_signature'
+;
+
+
+/**
+Example 12: Restricted Access to Query Results
+**/
+
+extreme_heartbeat_restricted_access=
+COMPUTE patient_stream EVERY 5 MINUTES
+WITH
+ALLOW WHEN MEAN( heart_beat, 1 MINUTES ) >= 190
+AND doctor_id IN (doctor_id1, doctor_id2)
+AND region == clinic_region
+;
+
+
+/**
+Example 13: Data Stream Temporal Evolution
+**/
+
+malaria_12_hour =
+COMPUTE(
+COUNT (disease WHEN == malaria, 12 HOURS)/
+COUNT(disease,12 HOURS) )
+BY region EVERY 12 HOURS
+;
+
+malaria_current =
+COMPUTE(
+RUNNING_COUNT(disease WHEN == malaria)/
+RUNNING_COUNT(disease) )
+BY region EVERY 12 HOURS
+;
+
+malaria_alert =
+COMPUTE( INSIGHT malaria_12_hour - INSIGHT malaria_current)
+WHEN >= 0.02 EVERY 12 HOURS
+;
+
+/**
+Example 14: Correlation Analysis
+**/
+
+correlation =
+COMPUTE CORRELATION (
+COUNT(disease WHEN == heart_attack ),
+MEAN(patient_age)
+) BY patient_sex EVERY 1 MONTHS
+;
+
+/**
+D. Microservices Auto-Scaling for Content Streaming
+**/
+/**
+Example 15: Insights used in Other Queries
+**/
+
+mean_latency = COMPUTE MEAN(latency) EVERY 5 SECONDS;
+
+scale_out = COMPUTE
+INSIGHT mean_latency WHEN >= 500
+EVERY 5 SECONDS;
+
+scale_in = COMPUTE
+INSIGHT mean_latency WHEN < 500
+EVERY 5 SECONDS
+;
+
+/**
+Example 16: Complex Rule-Based Scaling
+**/
+
+scale_out = COMPUTE instance_id WHEN
+INSIGHT avg_cpu >= 80 AND
+INSIGHT avg_ram >= 70
+EVERY 5 SECONDS
+;
+
+
+/**
+Example 17: Overloaded Services of Each Region
+**/
+
+services_latency = COMPUTE
+MEAN(latency, 5 MINUTES) WHEN > 500 BY service
+EVERY 60 SECONDS
+;
+
+overloaded_services = COMPUTE
+MAX( INSIGHT services_latency ) BY region
+EVERY 60 SECONDS
+;
+
+
+/**
+Example 18: User-Defined Functions
+FUNCTION ipToCountry(userIP){....}
+FUNCTION getLegalCountries(contID){....}
+**/
+
+new_requests = COMPUTE request
+WHEN ipToCountry(userIP)
+IN getLegalCountries(contID)
+EVERY 5 SECONDS
+;
+
+
+
+
+
+
+

@@ -18,23 +18,25 @@ insights                :  insight ( SEMI_COLON insight)* SEMI_COLON? EOF
 ;
 insight                 :  ID ASSIGNMENT body
 ;
-body                    : COMPUTE composition groupBY? (WHEN filters)?  EVERY interval (WITH optimizations)?
+body                    : COMPUTE composition (EVERY interval)? (WITH optimizations)?
 ;
 groupBY                 :  BY metric
 ;
-composition             : compositeExpression
+composition             : compositeExpression (FROM metricStream)? (groupBY)? 
 ;
-compositeExpression     : LPAR compositeExpression BINARY_OPERATOR compositeExpression RPAR
+compositeExpression     : LPAR compositeExpression BINARY_OPERATOR compositeExpression (BINARY_OPERATOR compositeExpression)* RPAR
+                        | LPAR INSIGHT ID BINARY_OPERATOR INSIGHT ID RPAR (WHEN filters)?
                         | expression
-                        | mapOp LPAR expression RPAR
+                        | LPAR expression RPAR
+                        | INSIGHT ID (WHEN filters)?
 ;
-expression              : aggregate (groupBY)? (WHEN filters)?
+expression              : aggregate (WHEN filters)?
                         | number
                         | metricStream
-                        | INSIGHT ID
+                        | mapOp LPAR expression RPAR
 ;
-aggregate               : windowed_function LPAR metricStream COMMA window RPAR
-                        | windowed_function LPAR compositeExpression ( COMMA compositeExpression )* RPAR
+aggregate               : windowed_function LPAR composition  (COMMA composition)* RPAR
+                        | windowed_function LPAR metricStream COMMA window RPAR
                         | windowed_function LPAR metricStream COMMA window COMMA offset RPAR
                         | accumulated_function LPAR metricStream  RPAR
 ;
@@ -44,26 +46,25 @@ windowed_function       : windowed_parameterized
 accumulated_function    : accumulated_parameterized
                         | ACCUMULATED_FUNCTION
 ;
-metricStream            : metric (FROM membership)? (WHEN filters)?
+metricStream            : metrics (WHEN filters)?
 ;
-membership              : LPAR member (COMMA member)*  RPAR
+metrics                 : metric (COMMA metric)*
 ;
-member                  : ID;
 metric                  : ID;
 interval                : timeperiod | tuplebased;
 tuplebased              : POSITIVE_INT sizeUnit;
 sizeUnit                : 'D' | 'H' | 'K' | 'M';
 window                  : timeperiod;
 offset                  : timeperiod;
-timeperiod              : POSITIVE_INT TIME_PERIOD;
-optimizations           :  salience
+timeperiod              : POSITIVE_INT TIME_PERIOD (AT SPECIFIC_TIME)?
+                        ;
+optimizations           : optimization (AND optimization)*;
+optimization            : salience
+                        | confidence AND 'AWARENESS' 'ON' awareness
                         | SAMPLE PERCENT
-                        |  salience AND 'ALLOW' WHEN filters
-                        |  confidence AND 'AWARENESS' 'ON' awareness
-                        |  salience AND  confidence  AND 'AWARENESS' 'ON' awareness
-                        |  confidence AND  salience AND 'AWARENESS' 'ON' awareness
-                        |  'ALLOW' WHEN filters
-                        |  'SIGNATURE'  '\'' ID '\''
+                        | 'SIGNATURE'  '\'' ID '\''  
+                        | 'ALLOW' WHEN filters
+                        | 'ALLOW ON' ('DEDICATED'|POSITIVE_INT 'NODES')
 ;
 awareness               : 'COMPUTATIONS' | 'ACCURACY'
 ;
@@ -74,8 +75,8 @@ confidence              : MAX_ERROR PERCENT AND CONFIDENCE PERCENT
 ;
 filters                 : filter ( (AND|OR)   filter)*
                         ;
-filter                  : RELATIONAL_OPERATOR (compositeExpression | membership)
-                        | compositeExpression RELATIONAL_OPERATOR (compositeExpression| membership)
+filter                  : RELATIONAL_OPERATOR compositeExpression
+                        | compositeExpression RELATIONAL_OPERATOR compositeExpression
 ;
 number                  : PERCENT |  POSITIVE_INT | FLOAT
 ;
@@ -86,12 +87,12 @@ mapOp                   : MAP_OPERATION | udfName
 udfName                 : ID
 ;
 MAP_OPERATION           :  'SQRT' | 'ABS' | 'SQR' | 'GEOHASH' LBR POSITIVE_INT RBR  ;
-WINDOWED_FUNCTION       :  'ARITHMETIC_MEAN'  | 'COUNT' | 'SUM' | 'MAX' | 'MIN'
+WINDOWED_FUNCTION       :  'MEAN'  | 'COUNT' | 'SUM' | 'MAX' | 'MIN'
                          | 'SDEV' | 'MODE' | 'MEDIAN' | 'VARIANCE' | 'GEOMETRIC_MEAN' | 'CORRELATION'
 ;
 ACCUMULATED_FUNCTION    :  'RUNNING_COUNT' | 'RUNNING_MEAN' | 'RUNNING_MAX' | 'RUNNING_MIN' | 'RUNNING_SDEV' | 'DIFF' ;
-TIME_PERIOD             : 'MILLIS' | 'SECONDS' | 'MINUTES' | 'HOURS';
-INSIGHT                    : 'INSIGHT';
+TIME_PERIOD             : 'MILLIS' | 'SECONDS' | 'MINUTES' | 'HOURS' | 'DAYS' | 'MONTHS' ;
+INSIGHT                 : 'INSIGHT';
 RELATIONAL_OPERATOR     :  GE | GT  | LT  | LE| EQ | NQ | IN;
 GE                      : '>=';
 GT                      : '>';
@@ -110,6 +111,7 @@ PERCENT                 : '0'? '.' POSITIVE_INT+
                         | '1' ('.' '0'+ )?
 ;
 FLOAT                   : ('+' | '-') ?  [0-9] + ('.' [0-9] +)? ;
+SPECIFIC_TIME           : [0-9]+':'[0-9]+;
 ASSIGNMENT : '=';
 COMMA : ',';
 COLON : ':';
@@ -131,6 +133,7 @@ SALIENCE        : 'SALIENCE' ;
 SAMPLE          : 'SAMPLE' ;
 CONFIDENCE      : 'CONFIDENCE' ;
 MAX_ERROR       : 'MAX_ERROR' ;
+AT              : 'AT' | 'at' ;
 ID              : [a-zA-Z_.]+[a-zA-Z_0-9.]*;
 REGX            : [a-zA-Z_.*]+[a-zA-Z_0-9.*]*;
 COMMENT         : '/*' .*? '*/' -> skip ;
